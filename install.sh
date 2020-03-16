@@ -648,7 +648,7 @@ cat <<-EOF > /etc/iptables/rules.v6
 COMMIT
 EOF
 
-apt-get install -yq debian-goodies tree ccze neofetch dnsutils netwok > /dev/null 2>&1
+apt-get install -yq debian-goodies tree ccze neofetch dnsutils netwox > /dev/null 2>&1
 mv /root/.bashrc /root/.bashrc_bak
 cp /etc/bash.bashrc_new /root/.bashrc
 mv /etc/bash.bashrc_new /etc/bash.bashrc
