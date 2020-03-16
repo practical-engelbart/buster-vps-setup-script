@@ -488,7 +488,7 @@ Unattended-Upgrade::Automatic-Reboot-WithUsers "true";
 Unattended-Upgrade::Automatic-Reboot-Time "02:00";
 EOF
 
-cat <<-EOF > /etc/bash.bashrc
+cat <<-EOF > /etc/bash.bashrc_new
 # If not running interactively, don't do anything
 [ -z "$PS1" ] && return
 
@@ -583,6 +583,7 @@ EOF
 
 mkdir /etc/iptables
 chmod 700 /etc/iptables
+
 cat <<-EOF > /etc/iptables/rules.v4
 *filter
 -P INPUT DROP
@@ -646,3 +647,5 @@ cat <<-EOF > /etc/iptables/rules.v6
 -A BLOCK -j REJECT
 COMMIT
 EOF
+
+apt-get install -yq debian-goodies tree neofetch dnsutils netwok > /dev/null 2>&1 
