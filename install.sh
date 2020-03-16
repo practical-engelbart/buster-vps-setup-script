@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 apt-get update
 apt-get upgrade -yq
 
@@ -489,10 +489,6 @@ Unattended-Upgrade::Automatic-Reboot-Time "02:00";
 EOF
 
 cat <<-EOF > /etc/bash.bashrc
-# ~/.bashrc: executed by bash(1) for non-login shells.
-# see /usr/share/doc/bash/examples/startup-files (in the package bash-doc)
-# for examples
-
 # If not running interactively, don't do anything
 [ -z "$PS1" ] && return
 
@@ -563,8 +559,8 @@ esac
 if [ -x /usr/bin/dircolors ]; then
     test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
     alias ls='ls --color=auto'
-    #alias dir='dir --color=auto'
-    #alias vdir='vdir --color=auto'
+    alias dir='dir --color=auto'
+    alias vdir='vdir --color=auto'
 
     alias grep='grep --color=auto'
     alias fgrep='fgrep --color=auto'
@@ -595,6 +591,7 @@ fi
 if [ -f /etc/bash_completion ] && ! shopt -oq posix; then
     . /etc/bash_completion
 fi
+
 EOF
 
 mkdir /etc/iptables
