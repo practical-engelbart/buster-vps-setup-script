@@ -123,7 +123,7 @@ X11Forwarding no
 EOF
 
 apt-get install -yq build-essential linux-headers-amd64 linux-headers-cloud-amd64 > /dev/null 2>&1
-apt-get install -yq apt-transport-https ca-certificates curl gnupg2 software-properties-common > /dev/null 2>&1
+apt-get install -yq apt-transport-https ca-certificates curl jq gnupg2 software-properties-common > /dev/null 2>&1
 apt-get install -yq rkhunter usbguard haveged pwgen auditd audispd-plugins unattended-upgrades debsums debsecan ntp > /dev/null 2>&1
 apt-get install -yq apparmor dh-apparmor apparmor-profiles apparmor-profiles-extra apparmor-utils apparmor-easyprof > /dev/null 2>&1
 apt-get install -yq libpam-apparmor libcrack2 cracklib-runtime libpam-cracklib python3-cracklib libpam-tmpdir > /dev/null 2>&1
@@ -447,7 +447,7 @@ cat <<-EOF > /etc/audit/rules.d/hardening.rules
 
 EOF
 
-apt-get install wget > /dev/null 2>&1
+apt-get install -yq wget > /dev/null 2>&1
 cd /tmp
 wget https://dl.google.com/go/go1.14.linux-amd64.tar.gz
 tar -C /usr/local -xzf go1.14.linux-amd64.tar.gz
@@ -488,71 +488,3 @@ Unattended-Upgrade::Automatic-Reboot-WithUsers "true";
 Unattended-Upgrade::Automatic-Reboot-Time "02:00";
 EOF
 
-mkdir /etc/iptables
-chmod 700 /etc/iptables
-
-cat <<-EOF > /etc/iptables/rules.v4
-*filter
--P INPUT DROP
--P FORWARD DROP
--P OUTPUT ACCEPT
--N BLOCK
--I INPUT -i lo -j ACCEPT
--A INPUT -d 127.0.0.0/8 ! -i lo -j REJECT --reject-with icmp-port-unreachable
--A INPUT -i wg0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
--A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
--A INPUT -p tcp -m state --state NEW -m tcp --dport 22 -j ACCEPT
--A INPUT -p tcp -m tcp --dport 80 -j ACCEPT
--A INPUT -p tcp -m tcp --dport 443 -j ACCEPT
--A INPUT -p udp -m udp --dport 51820 -m conntrack --ctstate NEW -j ACCEPT
--A INPUT -p icmp -m icmp --icmp-type 8 -j ACCEPT
--A INPUT -m limit --limit 5/min -j LOG --log-prefix "iptables denied: " --log-level 7
--A INPUT -m conntrack --ctstate INVALID -j DROP
--A INPUT -j REJECT --reject-with icmp-port-unreachable
--A FORWARD -i wg0 -o ens3 -j ACCEPT
--A FORWARD -i en3 -o wg0 -j ACCEPT
--A FORWARD -i wg0 -o wg0 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
--A FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
--A FORWARD -m limit --limit 5/min -j LOG --log-prefix "iptables_FORWARD_denied: " --log-level 7
--A FORWARD -m conntrack --ctstate INVALID -j DROP
--A FORWARD -j REJECT
--A OUTPUT -o lo -j ACCEPT
--A OUTPUT -o wg0 -j ACCEPT
--A OUTPUT -j ACCEPT
--A BLOCK -j REJECT
-COMMIT
-EOF
-
-cat <<-EOF > /etc/iptables/rules.v6
-*filter
--P INPUT DROP
--P FORWARD DROP
--P OUTPUT ACCEPT
--N BLOCK
--I INPUT -i lo -j ACCEPT
--A INPUT -s ::1/128 ! -i lo -j REJECT --reject-with icmp6-port-unreachable
--A INPUT -i wg0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
--A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
--A INPUT -p tcp -m tcp --dport 22 -j ACCEPT
--A INPUT -p tcp -m tcp --dport 80 -j ACCEPT
--A INPUT -p tcp -m tcp --dport 443 -j ACCEPT
--A INPUT -p udp -m udp --dport 51820 -m conntrack --ctstate NEW -j ACCEPT
--A INPUT -p ipv6-icmp -j ACCEPT
--A INPUT -m limit --limit 5/min -j LOG --log-prefix "ip6tables denied: " --log-level 7
--A INPUT -m conntrack --ctstate INVALID -j DROP
--A INPUT -j REJECT --reject-with icmp6-port-unreachable
--A FORWARD -i wg0 -o ens3 -j ACCEPT
--A FORWARD -i ens3 -o wg0 -j ACCEPT
--A FORWARD -i wg0 -o wg0 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
--A FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
--A FORWARD -m limit --limit 5/min -j LOG --log-prefix "ip6tables_FORWARD_denied: " --log-level 7
--A FORWARD -m conntrack --ctstate INVALID -j DROP
--A FORWARD -j REJECT --reject-with icmp6-port-unreachable
--A OUTPUT -o lo -j ACCEPT
--A OUTPUT -o wg0 -j ACCEPT
--A OUTPUT -j ACCEPT
--A BLOCK -j REJECT
-COMMIT
-EOF
-
-apt-get install -yq debian-goodies tree ccze neofetch dnsutils netwox > /dev/null 2>&1
