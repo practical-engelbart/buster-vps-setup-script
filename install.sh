@@ -449,9 +449,10 @@ EOF
 
 apt-get install -yq wget > /dev/null 2>&1
 cd /tmp
-wget https://dl.google.com/go/go1.14.linux-amd64.tar.gz
-tar -C /usr/local -xzf go1.14.linux-amd64.tar.gz
+wget https://dl.google.com/go/go1.14.2.linux-amd64.tar.gz
+tar -C /usr/local -xzf go1.14.2.linux-amd64.tar.gz
 echo 'export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin' >> /etc/profile
+echo 'export GOPATH=$HOME/go' >> /etc/profile
 
 cat <<-EOF > /etc/rsyslog.d/10-syslog.conf
 $PreserveFQDN on
