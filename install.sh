@@ -18,7 +18,7 @@ echo 'ALL: PARANOID' > /etc/hosts.deny
 chmod 644 /etc/hosts.allow
 chmod 644 /etc/hosts.deny
 
-# updating fstab
+# updating fstab 
 echo 'proc /proc proc defaults,hidepid=2 0 0' >> /etc/fstab
 
 cat <<-EOF > /etc/sysctl.d/01-sysctl.conf
@@ -82,7 +82,10 @@ net.ipv4.tcp_rmem = 4096 87380 16777216
 net.ipv4.tcp_wmem = 4096 65536 16777216
 EOF
 
-sysctl -p
+cat <<-EOF > /etc/sysctl.d/10-kube.conf
+net.bridge.bridge-nf-call-ip6tables=1
+net.bridge.bridge-nf-call-iptables=1
+EOF
 
 mv /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
 
@@ -101,7 +104,7 @@ ClientAliveInterval 300
 Compression no
 HostbasedAuthentication no
 IgnoreUserKnownHosts yes
-KexAlgorithms curve25519-sha256@libssh.org,ecdh-sha2-nistp521,ecdh-sha2-nistp384,ecdh-sha2-nistp256,diffie-hellman-group-exchange-sha256
+KexAlgorithms curve25519-sha256@libssh.org,ecdh-sha2-nistp521,ecdh-sha2-nistp384,ecdh-sha2-nistp256,diffie-hellman-group-exchange-sha256                                                                                                  
 LoginGraceTime 20
 LogLevel VERBOSE
 Macs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-512,hmac-sha2-256
@@ -122,79 +125,74 @@ UsePAM yes
 X11Forwarding no
 EOF
 
-apt-get install -yq build-essential linux-headers-amd64 linux-headers-cloud-amd64 > /dev/null 2>&1
+apt-get install -yq build-essential linux-headers-amd64 linux-headers-cloud-amd64 debmake debconf debhelper bc > /dev/null 2>&1
 apt-get install -yq apt-transport-https ca-certificates curl jq gnupg2 software-properties-common > /dev/null 2>&1
 apt-get install -yq rkhunter usbguard haveged pwgen auditd audispd-plugins unattended-upgrades debsums debsecan ntp > /dev/null 2>&1
 apt-get install -yq apparmor dh-apparmor apparmor-profiles apparmor-profiles-extra apparmor-utils apparmor-easyprof > /dev/null 2>&1
-apt-get install -yq libpam-apparmor libcrack2 cracklib-runtime libpam-cracklib python3-cracklib libpam-tmpdir > /dev/null 2>&1
+apt-get install -yq libpam-apparmor libcrack2 cracklib-runtime libpam-cracklib python3-cracklib libpam-tmpdir > /dev/null 2>&1                                                                                                            
+apt-get install -yq fail2ban debianutils debian-goodies > /dev/null 2>&1
 
-echo "deb http://deb.debian.org/debian/ unstable main" > /etc/apt/sources.list.d/unstable-wireguard.list
-printf 'Package: *\nPin: release a=unstable\nPin-Priority: 90\n' > /etc/apt/preferences.d/limit-unstable
+echo 'deb http://deb.debian.org/debian buster-backports main' >> /etc/apt/sources.list
 apt update
+apt-get -t buster-backports install -yq wireguard > /dev/null 2>&1
+cd /etc/wireguard/
+umask 077
+wg genkey | tee private.key | wg pubkey > public.key
+wg genpsk > preshare.key
 
-apt-get install -yq wireguard wireguard-tools wireguard-dkms > /dev/null 2>&1
-touch /etc/wireguard/wg0.conf
-chmod -R 600 /etc/wireguard/
+echo '[Interface]' > /etc/wireguard/wg0.conf
+echo 'Address = 10.128.2.1/24' >> /etc/wireguard/wg0.conf
+echo 'ListenPort = 51820' >> /etc/wireguard/wg0.conf
+echo 'PrivateKey = ${PrivateKey}' >> /etc/wireguard/wg0.conf
+echo 'PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE' >> /etc/wireguard/wg0.conf
+echo 'PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE' >> /etc/wireguard/wg0.conf
 
-# Setting up USBGuard
+chmod -R 600 /etc/wireguard
 usbguard generate-policy > /tmp/rules.conf
 install -m 0600 -o root -g root /tmp/rules.conf /etc/usbguard/rules.conf
 
 # Enforce apparmor profiles
 echo 'session optional pam_apparmor.so order=user,group,default' > /etc/pam.d/apparmor
-
 echo 'server 0.pool.ntp.org 1.pool.ntp.org 2.pool.ntp.org 3.pool.ntp.org' >> /etc/ntp.conf
 
 cat <<-EOF > /etc/audit/rules.d/hardening.rules
 # Remove any existing rules
 -D
-
 # Buffer Size
 -b 8192
-
 # Ignore errors
 -i
-
 # Failure Mode
 -f 1
 # Audit the audit logs
 -w /var/log/audit/ -k auditlog
-
 # Auditd configuration
 -w /etc/audit/ -p wa -k auditconfig
 -w /etc/libaudit.conf -p wa -k auditconfig
 -w /etc/audisp/ -p wa -k audispconfig
-
 # Monitor for use of audit management tools
 -w /sbin/auditctl -p x -k audittools
 -w /sbin/auditd -p x -k audittools
-
 # Monitor AppArmor configuration changes
 -w /etc/apparmor/ -p wa -k apparmor
 -w /etc/apparmor.d/ -p wa -k apparmor
-
 # Monitor usage of AppArmor tools
 -w /sbin/apparmor_parser -p x -k apparmor_tools
 -w /usr/sbin/aa-complain -p x -k apparmor_tools
 -w /usr/sbin/aa-disable -p x -k apparmor_tools
 -w /usr/sbin/aa-enforce -p x -k apparmor_tools
-
 # Monitor Systemd configuration changes
 -w /etc/systemd/ -p wa -k systemd
 -w /lib/systemd/ -p wa -k systemd
-
 # Monitor usage of systemd tools
 -w /bin/systemctl -p x -k systemd_tools
 -w /bin/journalctl -p x -k systemd_tools
-
 # Special files
 -a always,exit -F arch=x86_64 -S mknod -S mknodat -k specialfiles
 -a always,exit -F arch=b32 -S mknod -S mknodat -k specialfiles
-
 # Mount operations
 -a always,exit -F arch=x86_64 -S mount -F auid>=1000 -F auid!=4294967295 -F key=export
 -a always,exit -F arch=b32 -S mount -F auid>=1000 -F auid!=4294967295 -F key=export
-
 # Changes to the time
 -a always,exit -F arch=x86_64 -S settimeofday -k audit_time_rules
 -a always,exit -F arch=x86_64 -S adjtimex -k audit_time_rules
@@ -202,7 +200,6 @@ cat <<-EOF > /etc/audit/rules.d/hardening.rules
 -a always,exit -F arch=b32 -S settimeofday -k audit_time_rules
 -a always,exit -F arch=b32 -S adjtimex -k audit_time_rules
 -a always,exit -F arch=b32 -S clock_settime -k audit_time_rules
-
 # Cron configuration & scheduled jobs
 -w /etc/cron.allow -p wa -k cron
 -w /etc/cron.deny -p wa -k cron
@@ -213,20 +210,16 @@ cat <<-EOF > /etc/audit/rules.d/hardening.rules
 -w /etc/cron.weekly/ -p wa -k cron
 -w /etc/crontab -p wa -k cron
 -w /var/spool/cron/crontabs/ -k cron
-
 # User, group, password databases
 -w /etc/group -p wa -k audit_rules_usergroup_modification
 -w /etc/passwd -p wa -k audit_rules_usergroup_modification
 -w /etc/gshadow -p wa -k audit_rules_usergroup_modification
 -w /etc/shadow -p wa -k audit_rules_usergroup_modification
 -w /etc/security/opasswd -p wa -k audit_rules_usergroup_modification
-
 # MAC-policy
 -w /etc/selinux/ -p wa -k MAC-policy
-
 # Monitor usage of passwd
 -w /usr/bin/passwd -p x -k passwd_modification
-
 # Monitor for use of tools to change group identifiers
 -w /usr/sbin/groupadd -p x -k group_modification
 -w /usr/sbin/groupmod -p x -k group_modification
@@ -234,7 +227,6 @@ cat <<-EOF > /etc/audit/rules.d/hardening.rules
 -w /usr/sbin/useradd -p x -k user_modification
 -w /usr/sbin/usermod -p x -k user_modification
 -w /usr/sbin/adduser -p x -k user_modification
-
 # Monitor module tools
 -w /sbin/insmod -p x -k modules
 -w /sbin/rmmod -p x -k modules
@@ -242,7 +234,6 @@ cat <<-EOF > /etc/audit/rules.d/hardening.rules
 -w /usr/sbin/insmod -p x -k modules
 -w /usr/sbin/rmmod -p x -k modules
 -w /usr/sbin/modprobe -p x -k modules
-
 # Login configuration and information
 -w /etc/login.defs -p wa -k login
 -w /etc/securetty -p wa -k login
@@ -250,62 +241,48 @@ cat <<-EOF > /etc/audit/rules.d/hardening.rules
 -w /var/run/faillock/ -p wa -k logins
 -w /var/log/lastlog -p wa -k login
 -w /var/log/tallylog -p wa -k login
-
 # Network configuration
 -w /etc/hosts -p wa -k audit_rules_networkconfig_modification
 -w /etc/network/ -p wa -k audit_rules_networkconfig_modification
 -w /etc/sysconfig/network -p wa -k audit_rules_networkconfig_modification
-
 # System startup scripts
 -w /etc/inittab -p wa -k init
 -w /etc/init.d/ -p wa -k init
 -w /etc/init/ -p wa -k init
-
 # Library search paths
 -w /etc/ld.so.conf -p wa -k libpath
-
 # Local time zone
 -w /etc/localtime -p wa -k localtime
-
 # Time zone configuration
 -w /etc/timezone -p wa -k audit_time_ruleszone
-
 # Kernel parameters
 -w /etc/sysctl.conf -p wa -k sysctl
-
 # Modprobe configuration
 -w /etc/modprobe.conf -p wa -k modprobe
 -w /etc/modprobe.d/ -p wa -k modprobe
 -w /etc/modules -p wa -k modprobe
-
 # Module manipulations
 -a always,exit -F arch=x86_64 -S init_module -S delete_module -F key=modules
 -a always,exit -F arch=x86_64 -S init_module -F key=modules
 -a always,exit -F arch=b32 -S init_module -S delete_module -F key=modules
 -a always,exit -F arch=b32 -S init_module -F key=modules
-
 # PAM configuration
 -w /etc/pam.d/ -p wa -k pam
 -w /etc/security/limits.conf -p wa -k pam
 -w /etc/security/pam_env.conf -p wa -k pam
 -w /etc/security/namespace.conf -p wa -k pam
 -w /etc/security/namespace.init -p wa -k pam
-
 # Postfix configuration
 -w /etc/aliases -p wa -k mail
 -w /etc/postfix/ -p wa -k mail
-
 # SSH configuration
 -w /etc/ssh/sshd_config -k sshd
-
 # Changes to hostname
 -a always,exit -F arch=x86_64 -S sethostname -S setdomainname -k audit_rules_networkconfig_modification
 -a always,exit -F arch=b32 -S sethostname -S setdomainname -k audit_rules_networkconfig_modification
-
 # Changes to issue
 -w /etc/issue -p wa -k audit_rules_networkconfig_modification
 -w /etc/issue.net -p wa -k audit_rules_networkconfig_modification
-
 # Capture all unauthorized file accesses
 -a always,exit -F arch=x86_64 -S creat -F exit=-EACCES -F auid>=1000 -F auid!=4294967295 -F key=access
 -a always,exit -F arch=x86_64 -S creat -F exit=-EPERM -F auid>=1000 -F auid!=4294967295 -F key=access
@@ -331,19 +308,16 @@ cat <<-EOF > /etc/audit/rules.d/hardening.rules
 -a always,exit -F arch=b32 -S truncate -F exit=-EPERM -F auid>=1000 -F auid!=4294967295 -F key=access
 -a always,exit -F arch=b32 -S ftruncate -F exit=-EACCES -F auid>=1000 -F auid!=4294967295 -F key=access
 -a always,exit -F arch=b32 -S ftruncate -F exit=-EPERM -F auid>=1000 -F auid!=4294967295 -F key=access
-
 # Monitor for use of process ID change (switching accounts) applications
 -w /bin/su -p x -k actions
 -w /usr/bin/sudo -p x -k actions
 -w /etc/sudoers -p wa -k actions
 -w /etc/sudoers.d -p wa -k actions
-
 # Monitor usage of commands to change power state
 -w /sbin/shutdown -p x -k power
 -w /sbin/poweroff -p x -k power
 -w /sbin/reboot -p x -k power
 -w /sbin/halt -p x -k power
-
 # Use of privileged commands
 -a always,exit -F path=/bin/fusermount -F perm=x -F auid>=1000 -F auid!=4294967295 -F key=privileged
 -a always,exit -F path=/bin/mount -F perm=x -F auid>=1000 -F auid!=4294967295 -F key=privileged
@@ -444,28 +418,32 @@ cat <<-EOF > /etc/audit/rules.d/hardening.rules
 -w /var/run/docker.sock -k docker
 # Make the configuration immutable
 -e 2
-
 EOF
 
 apt-get install -yq wget > /dev/null 2>&1
 cd /tmp
-wget https://dl.google.com/go/go1.14.2.linux-amd64.tar.gz
-tar -C /usr/local -xzf go1.14.2.linux-amd64.tar.gz
-echo 'export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin' >> /etc/profile
+wget https://dl.google.com/go/go1.14.3.linux-amd64.tar.gz
+tar -C /usr/local -xzf go1.14.3.linux-amd64.tar.gz
+
 echo 'export GOPATH=$HOME/go' >> /etc/profile
+echo 'export PATH=$PATH:/usr/local/go/bin:$GOPATH/bin' >> /etc/profile
+
+export GOPATH=$HOME/go
+export PATH=$PATH:/usr/local/go/bin:$GOPATH/bin
+
+go get -u github.com/jingweno/ccat
+go get -u github.com/cloudflare/cfssl/cmd/cfssl
+go get -u github.com/cloudflare/cfssl/cmd/cfssljson
+
+apt-get install -yq software-properties-common syslog-summary ccze jq > /dev/null 2>&1
 
 cat <<-EOF > /etc/rsyslog.d/10-syslog.conf
 $PreserveFQDN on
 ##Enable sending of logs over UDP add the following line:
-
 *.* @10.128.1.1:514
-
 ##Enable sending of logs over TCP add the following line:
-
 *.* @@10.128.1.1:514
-
 ##Set disk queue when rsyslog server will be down:
-
 $ActionQueueFileName queue
 $ActionQueueMaxDiskSpace 1g
 $ActionQueueSaveOnShutdown on
@@ -474,13 +452,6 @@ $ActionResumeRetryCount -1
 EOF
 
 cat <<-EOF > /etc/apt/apt.conf.d/40unattended-upgrades
-Unattended-Upgrade::Origins-Pattern {
-        "origin=Debian,codename=${distro_codename}-updates";
-        "origin=Debian,codename=${distro_codename},label=Debian";
-        "origin=Debian,codename=${distro_codename},label=Debian-Security";
-        "o=Debian,a=stable";
-        "o=Debian,a=stable-updates";
-};
 Unattended-Upgrade::AutoFixInterruptedDpkg "true";
 Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
 Unattended-Upgrade::Remove-New-Unused-Dependencies "true";
@@ -488,4 +459,247 @@ Unattended-Upgrade::Automatic-Reboot "true";
 Unattended-Upgrade::Automatic-Reboot-WithUsers "true";
 Unattended-Upgrade::Automatic-Reboot-Time "02:00";
 EOF
+
+apt-get install -yq cgroup-tools cgroup-bin > /dev/null 2>&1
+
+sysctl --system
+
+modprobe br_netfilter
+modprobe ip_set
+modprobe ip_set_hash_ip
+modprobe ip_set_hash_net
+modprobe iptable_nat
+modprobe iptable_mangle
+modprobe iptable_raw
+modprobe nf_conntrack_netlink
+modprobe nf_nat_ipv4
+modprobe nf_nat_masquerade_ipv4
+modprobe nfnetlink
+modprobe veth
+modprobe vxlan
+modprobe xt_comment
+modprobe xt_mark
+modprobe xt_multiport
+modprobe xt_nat
+modprobe xt_set
+modprobe xt_statistic
+
+apt-get update && apt-get install -yq ne apache2-utils libnss3-tools > /dev/null 2>&1
+
+### Add Docker’s official GPG key
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
+
+### Add Docker apt repository.
+add-apt-repository \
+  "deb [arch=amd64] https://download.docker.com/linux/debian \
+   $(lsb_release -cs) \
+   stable"
+
+## Install Docker CE.
+apt-get update && apt-get install -yq containerd.io docker-ce docker-ce-cli > /dev/null 2>&1
+
+## Protect Docker Daemon.
+cat > /etc/docker/daemon.json <<EOF
+{
+  "exec-opts": ["native.cgroupdriver=systemd"],
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "100m"
+  },
+  "storage-driver": "overlay2",
+  "dns": ["1.1.1.1","1.0.0.1"],
+  "allow-nondistributable-artifacts": ["registry:5000"]
+}
+EOF
+
+mkdir -p /etc/systemd/system/docker.service.d/
+mkdir /root/.docker
+
+cat > /root/.docker/ca-csr.json <<EOF
+{
+  "CN": "HOST CA",
+  "key": {
+    "algo": "ecdsa",
+    "size": 256
+  },
+  "names": [
+    {
+      "C": "US",
+      "L": "Los Angeles",
+      "O": "Docker",
+      "OU": "CA",
+      "ST": "California"
+    }
+  ]
+}
+EOF
+
+cat > /root/.docker/ca-config.json <<EOF
+{
+  "signing": {
+    "default": {
+      "expiry": "8760h"
+    },
+    "profiles": {
+      "server": {
+        "usages": [
+          "signing",
+          "key encipherment",
+          "server auth"
+        ],
+        "expiry": "8760h"
+      },
+      "client": {
+        "usages": [
+          "signing",
+          "key encipherment",
+          "client auth"
+        ],
+        "expiry": "8760h"
+      }
+    }
+  }
+}
+EOF
+
+cat > /root/.docker/docker-server-csr.json <<EOF
+{
+  "CN": "*.localdomain",
+  "hosts": [
+    "127.0.0.1",
+    "localhost",
+    "172.17.0.1"
+  ],
+  "key": {
+    "algo": "ecdsa",
+    "size": 256
+  },
+  "names": [
+    {
+      "C": "US",
+      "L": "Los Angeles",
+      "O": "Docker",
+      "OU": "Docker Engine",
+      "ST": "California"
+    }
+  ]
+}
+EOF
+
+cat > /root/.docker/docker-client-csr.json <<EOF
+{
+  "CN": "client",
+  "hosts": [""],
+  "key": {
+    "algo": "ecdsa",
+    "size": 256
+  },
+  "names": [
+    {
+      "C": "US",
+      "L": "Los Angeles",
+      "O": "Docker",
+      "OU": "Docker Admins",
+      "ST": "California"
+    }
+  ]
+}
+EOF
+
+cd /root/.docker
+cfssl gencert -initca ca-csr.json | cfssljson -bare ca
+
+cfssl gencert \
+-ca=ca.pem \
+-ca-key=ca-key.pem \
+-config=ca-config.json \
+-profile=server \
+docker-server-csr.json | cfssljson -bare docker-server
+
+cfssl gencert \
+-ca=ca.pem \
+-ca-key=ca-key.pem \
+-config=ca-config.json \
+-profile=client \
+docker-client-csr.json | cfssljson -bare docker-client
+
+cp ca.pem /etc/ssl/certs/ca.pem
+cp ca-key.pem /etc/ssl/private/ca-key.pem
+chmod 0444 /etc/ssl/private/ca-key.pem
+
+ln -s /root/.docker/ca.pem /usr/local/share/ca-certificates/root-ca.crt
+mv docker-server-key.pem /root/.docker/server-key.pem
+mv docker-server.pem /root/.docker/server.pem
+chmod 0444 /root/.docker/ca.pem
+chmod 0400 /root/.docker/server-key.pem
+chmod 0444 /root/.docker/server.pem
+chmod 600 /root/.docker
+
+cat > /etc/systemd/system/docker.service.d/override.conf <<EOF
+[Unit]
+Description=Docker Application Container Engine
+Documentation=http://docs.docker.io
+
+[Service]
+ExecStart=
+ExecStart=/usr/bin/dockerd -H tcp://0.0.0.0:2376 --tlsverify --tlscacert /root/.docker/ca.pem --tlscert /root/.docker/server.pem --tlskey /root/.docker/server-key.pem -H unix:///var/run/docker.sock
+ 
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+echo 'GRUB_CMDLINE_LINUX="cgroup_enable=memory swapaccount=1"' >> /etc/default/grub
+echo 'export DOCKER_HOST=tcp://$HOST:2376 DOCKER_TLS_VERIFY=1' >> /etc/profile
+
+curl -L "https://github.com/docker/compose/releases/download/1.25.5/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+chmod +x /usr/local/bin/docker-compose
+chmod 700 /usr/local/bin/docker-compose
+ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
+
+curl -L https://raw.githubusercontent.com/docker/compose/1.25.5/contrib/completion/bash/docker-compose -o /etc/bash_completion.d/docker-compose
+
+# DOCKER Firewall Rules
+cat > /etc/systemd/system/iptables-conf.service <<EOF
+[Unit]
+Description=Restore iptables firewall rules
+Before=network-pre.target
+
+[Service]
+Type=oneshot
+ExecStart=/sbin/iptables-restore -n /etc/iptables.conf
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+cat > /etc/systemd/system/ip6tables-conf.service <<EOF
+[Unit]
+Description=Restore ip6tables firewall rules
+Before=network-pre.target
+
+[Service]
+Type=oneshot
+ExecStart=/sbin/ip6tables-restore -n /etc/ip6tables.conf
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+iptables -N FILTERS
+iptables -N BLOCK
+ip6tables -N BLOCK
+ip6tables -N FILTERS 
+
+update-ca-certificates
+update-grub
+systemctl enable auditd
+systemctl enable apparmor
+systemctl enable docker
+systemctl enable fail2ban
+systemctl enable unattended-upgrades
+systemctl daemon-reload
+systemctl restart docker
 
