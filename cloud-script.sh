@@ -342,8 +342,8 @@ iptable_mangle
 EOF
 
 cd /tmp
-wget https://dl.google.com/go/go1.15.linux-amd64.tar.gz
-tar -C /usr/local -xzf go1.15.linux-amd64.tar.gz
+wget https://dl.google.com/go/go1.15.2.linux-amd64.tar.gz
+tar -C /usr/local -xzf go1.15.2.linux-amd64.tar.gz
 echo 'export GOPATH=$HOME/go' >> /etc/profile
 echo 'export PATH=$PATH:/usr/local/go/bin:$GOPATH/bin' >> /etc/profile
 
@@ -353,105 +353,7 @@ export PATH=$PATH:/usr/local/go/bin:$GOPATH/bin
 cd /opt
 git clone https://github.com/DNSCrypt/dnscrypt-proxy.git
 mkdir /etc/dnscrypt-proxy/
-mkdir -p /etc/cfssl/rootCA/
-cat << EOF > /etc/cfssl/rootCA/ca-config.json
-{
-  "signing": {
-    "default": {
-      "expiry": "43800h"
-    },
-    "profiles": {
-      "server": {
-        "expiry": "43800h",
-        "usages": [
-          "signing",
-          "key encipherment",
-          "server auth"
-        ]
-      },
-      "client": {
-        "expiry": "43800h",
-        "usages": [
-          "signing",
-          "key encipherment",
-          "client auth"
-        ]
-      },
-      "peer": {
-        "expiry": "43800h",
-        "usages": [
-          "signing",
-          "key encipherment",
-          "server auth",
-          "client auth"
-        ]
-      }
-    }
-  }
-}
-EOF
-cat << EOF > /etc/cfssl/rootCA/ca-csr.json
-{
-  "CN": "local CA",
-  "key": {
-    "algo": "ecdsa",
-    "size": 521
-  },
-  "names": [
-    {
-      "C": "US",
-      "L": "CA",
-      "O": "Local CA",
-      "ST": "Los Angeles"
-    }
-  ]
-}
-EOF
-mkdir /etc/cfssl/server/
-cat << EOF > /etc/cfssl/server/server.json
-{
-  "CN": "localhost",
-  "hosts": [
-    "127.0.0.1",
-    "::1",
-    "localhost"
-  ],
-  "key": {
-    "algo": "ecdsa",
-    "size": 521
-  },
-  "names": [
-    {
-      "C": "US",
-      "L": "CA",
-      "O": "Local CA",
-      "ST": "Los Angeles"
-    }
-  ]
-}
-EOF
-mkdir /etc/cfssl/client/
-cat <<EOF > /etc/cfssl/client/client.json
-{
-  "CN": "client",
-  "hosts": [
-    ""
-  ],
-  "key": {
-    "algo": "ecdsa",
-    "size": 521
-  },
-  "names": [
-    {
-      "C": "US",
-      "L": "CA",
-      "O": "Local CA",
-      "ST": "Los Angeles"
 
-    }
-  ]
-}
-EOF
 # Setting up USBGuard
 usbguard generate-policy > /tmp/rules.conf
 install -m 0600 -o root -g root /tmp/rules.conf /etc/usbguard/rules.conf
